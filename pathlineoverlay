@@ -2,76 +2,33 @@ import cv2
 import numpy as np
 import math
 
-def paper_checker(image):
+def draw_pathlines(image, roi):
+    x, y, w, h = roi
+
     grayscale = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(grayscale, (5, 5), 0)
-    edged = cv2.Canny(blurred, 50, 150)
+    edges = cv2.Canny(blurred, 50, 200, None, 3)
 
-    #https://docs.opencv.org/4.x/d4/d73/tutorial_py_contours_begin.html defines contours
-    contours, _ = cv2.findContours(edged, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    largest_contour = max(contours, key=cv2.contourArea)
-
-    perimeter = 0.02 * cv2.arcLength(largest_contour, True)
-    #https://docs.opencv.org/4.x/d3/dc0/group__imgproc__shape.html#ga0012a5fdaea70b8a9970165d98722b4c how to approximate contour shape
-    contour_sides = cv2.approxPolyDP(largest_contour, perimeter, True)
-
-    if len(contour_sides) == 4:
-        return contour_sides
-    return None
-
-def warp_perspective(image, contour):
-    contour = contour.reshape(4, 2)
-    rect = np.zeros((4, 2), dtype="float32")
-
-    s = contour.sum(axis=1)
-    rect[0] = contour[np.argmin(s)]  # top left
-    rect[2] = contour[np.argmax(s)]  # bottom right
-
-    diff = np.diff(contour, axis=1)
-    rect[1] = contour[np.argmin(diff)]  # top right
-    rect[3] = contour[np.argmax(diff)]  # bottom left
-
-    (tl, tr, br, bl) = rect
-    width1 = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
-    width2 = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
-    maxwidth = max(int(width1), int(width2))
-
-    height1 = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) ** 2))
-    height2 = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
-    maxheight = max(int(height1), int(height2))
-
-    dst = np.array([
-        [0, 0],
-        [maxwidth - 1, 0],
-        [maxwidth - 1, maxheight - 1],
-        [0, maxheight - 1]
-    ], dtype="float32")
-
-    #defines perspective transform functions and their parameters
-    #https://theailearner.com/tag/cv2-getperspectivetransform/#:~:text=OpenCV%20provides%20a%20function%20cv2,basic%20syntax%20is%20shown%20below.&text=Once%20the%20transformation%20matrix%20(M,pass%20it%20to%20the%20cv2.
-    M = cv2.getPerspectiveTransform(rect, dst)
-    warped = cv2.warpPerspective(image, M, (maxwidth, maxheight))
-    return warped
-
-def draw_pathlines(image):
-    grayscale = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(grayscale, (5, 5), 0)
-    edged = cv2.Canny(blurred, 50, 200, None, 3)
+    mask = np.zeros_like(edges)
+    mask[y:y+h, x:x+w] = edges[y:y+h, x:x+w]
 
     #https://docs.opencv.org/4.x/d3/de6/tutorial_js_houghlines.html defines houghline parameters and returns
-    lines = cv2.HoughLines(edged, 1, np.pi / 180, 150, None, 0, 0)
+    lines = cv2.HoughLines(mask, 1, np.pi / 180, 200, None, 0, 0)
     detected_lines = []
 
     pathlines = []
+    finalpath = []
     if lines is not None:
         for i in range(0, len(lines)):
-            rho = lines[i][0][0]
-            theta = lines[i][0][1]
+            rho = lines[i][0][0] #extracting distance from origin in hough space
+            theta = lines[i][0][1] # extracting angle
             detected_lines.append((rho, theta))
 
             matched = False
             for line in pathlines:
+                #comparing slope to other lines in path lines to match
                 if abs(rho - line[0]) < 20 and abs(theta - line[1]) < np.pi / 36:
+                    #calculating line average between these two lines for singular path line
                     line[0] = (line[0] + rho) / 2
                     line[1] = (line[1] + theta) / 2
                     matched = True
@@ -88,64 +45,57 @@ def draw_pathlines(image):
             b = math.sin(theta)
             x0 = a * rho
             y0 = b * rho
+            #extending lines / calculating endpoints
             pt1 = (int(x0 + 1000 * (-b)), int(y0 + 1000 * (a)))
             pt2 = (int(x0 - 1000 * (-b)), int(y0 - 1000 * (a)))
+            
+            finalpath.append((pt1, pt2))
+
+        for pt1, pt2 in finalpath:
             cv2.line(image, pt1, pt2, (0, 255, 0), 2, cv2.LINE_AA)
-    return image, pathlines
 
-def draw_centerline(image, pathlines):
-    if len(pathlines) < 2:
-        return image  
+    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
+    return image, finalpath
 
-    line1 = pathlines[0]
-    line2 = pathlines[1]
+def draw_centerline(image, ptpath):
+    if len(ptpath) < 2:
+        return image 
 
-    rho1, theta1 = line1
-    rho2, theta2 = line2
+    # calculating midpoints for each corresponding point to create center line
+    #https://stackoverflow.com/questions/49037902/how-to-interpolate-a-line-between-two-other-lines-in-python following this concept
+    midpoints = []
+    for i in range(0, len(ptpath) - 1, 2):
+        pt1_1, pt2_1 = ptpath[i]
+        pt1_2, pt2_2 = ptpath[i + 1]
 
-    a_x = math.cos(theta1) * rho1
-    a_y = math.sin(theta1) * rho1
+        midpoint1 = ((pt1_1[0] + pt1_2[0]) // 2, (pt1_1[1] + pt1_2[1]) // 2)
+        midpoint2 = ((pt2_1[0] + pt2_2[0]) // 2, (pt2_1[1] + pt2_2[1]) // 2)
+        
+        midpoints.append((midpoint1, midpoint2))
+    
+    for midpoint1, midpoint2 in midpoints:
+        cv2.line(image, midpoint1, midpoint2, (0, 0, 255), 2, cv2.LINE_AA)
 
-    b_x = math.cos(theta2) * rho2
-    b_y = math.sin(theta2) * rho2
-
-    midpoint_c_x = (a_x + b_x) / 2
-    midpoint_c_y = (a_y + b_y) / 2
-    midpoint_c = ((a_x + b_x) / 2, (a_y + b_y) / 2)
-
-    slope1 = math.tan(theta1)
-    print(slope1)
-    slope2 = math.tan(theta2)
-    print(slope2)
-
-    b1 = a_y - slope1 * a_x  
-    b2 = b_y - slope2 * b_x  
-
-    x_intersect = (b2 - b1) / (slope1 - slope2)
-    y_intersect = slope1 * x_intersect + b1
-
-    intersection_point = (int(x_intersect), int(y_intersect))
-
-    cv2.line(image, intersection_point, (int(midpoint_c_x), int(midpoint_c_y)), (255, 0, 0), 2, cv2.LINE_AA)
     return image
 
-lane_pic = cv2.imread('hozlinescrop.jpg')
+cap = cv2.VideoCapture(0)
 
-paper_contour = paper_checker(lane_pic)
+roi = (250, 100, 800, 600)
 
-if paper_contour is not None:
-    warped = warp_perspective(lane_pic, paper_contour)
+while cap.isOpened():
+    ret, frame = cap.read() 
 
-    pathlines_image, lines = draw_pathlines(warped)
+    if not ret:
+        print("Error, cannot recieve stream")
+        break 
+    
+    pathframe, lines = draw_pathlines(frame, roi)
+    overframe = draw_centerline(pathframe, lines)
 
-    result = draw_centerline(pathlines_image, lines)
+    cv2.imshow('frame', overframe)
 
-    cv2.imshow('Path and Center Lines Overlay', result)
-else:
-    pathlines_image, lines = draw_pathlines(lane_pic)
-    result = draw_centerline(pathlines_image, lines)
-    cv2.imshow('Path and Center Lines Overlay', result)
-    print("No paper detected")
+    if cv2.waitKey(1) == ord('q'):  
+        break
 
-cv2.waitKey(0)
+cap.release()
 cv2.destroyAllWindows()
