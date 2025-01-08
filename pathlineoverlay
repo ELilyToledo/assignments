@@ -76,10 +76,11 @@ def draw_centerline(image, path, cpoint):
         ept1_2, ept2_2 = path[i + 1]
 
         if distance(ept1_1, ept1_2):
-            
-
-        midpoint1 = ((ept1_1[0] + ept1_2[0]) // 2, (ept1_1[1] + ept1_2[1]) // 2)
-        midpoint2 = ((ept2_1[0] + ept2_2[0]) // 2, (ept2_1[1] + ept2_2[1]) // 2)
+            midpoint1 = ((ept1_1[0] + ept2_2[0]) // 2, (ept1_1[1] + ept2_2[1]) // 2)
+            midpoint2 = ((ept2_1[0] + ept1_2[0]) // 2, (ept2_1[1] + ept1_2[1]) // 2)
+        else:
+            midpoint1 = ((ept1_1[0] + ept1_2[0]) // 2, (ept1_1[1] + ept1_2[1]) // 2)
+            midpoint2 = ((ept2_1[0] + ept2_2[0]) // 2, (ept2_1[1] + ept2_2[1]) // 2)
 
         midpoints.append((midpoint1, midpoint2))
 
