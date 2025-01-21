@@ -1,21 +1,27 @@
 import cv2
 import numpy as np
-import math
 
+img = cv2.imread('sodabottom.jpg')
 
-cap = cv2.VideoCapture(0)
+h,w,_ = img.shape
+aratio = w/h
 
-while cap.isOpened():
-    ret, frame = cap.read() 
+resize = cv2.resize(img, (600, int(600 / aratio)))
+img = resize.copy()
 
-    if not ret:
-        print("Error, cannot recieve stream")
-        break 
-    
-    cv2.imshow('frame', frame)
+gray = cv2.cvtColor(resize, cv2.COLOR_BGR2GRAY)
+blur = cv2.GaussianBlur(gray, (17, 17), 0)
+cv2.imshow("blur",blur)
 
-    if cv2.waitKey(1) == ord('q'):  
-        break
+circles = cv2.HoughCircles(blur, cv2.HOUGH_GRADIENT, 1, 170, param1=50, param2=100)
 
-cap.release()
+if circles is not None:
+    circles = np.round(circles[0, :]).astype("int")
+    for circle in circles:
+        x,y,r = circle
+        cv2.circle(img, (x,y), r, (0,255,0), 2)
+
+cv2.imshow('circles', img)
+
+cv2.waitKey(0)
 cv2.destroyAllWindows()
