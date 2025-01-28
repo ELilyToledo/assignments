@@ -24,6 +24,7 @@ def circledetection(frame):
         circles = np.round(circles[0, :]).astype("int")
         for circle in circles:
             x,y,r = circle
+            #draw circle and center point
             cv2.circle(copy, (x,y), r, (0,255,0), 3)
             cv2.circle(copy, (x, y), 1, (0, 255, 0), 2)
             #cv2.circle(mask, (x, y), r, 255, -1)
@@ -35,6 +36,7 @@ def circledetection(frame):
 
 cap = cv2.VideoCapture("tube3crop.mp4")
 
+#loading the video file
 if (cap.isOpened() == False):
     print("Cannot open video")
 
@@ -43,9 +45,11 @@ while (cap.isOpened()):
     ret, frame = cap.read()
     if ret == True:
 
+        #apply overlay
         copy = circledetection(frame)
         cv2.imshow('frame', copy)
 
+        #click q to exit video
         if cv2.waitKey(25) & 0xFF == ord('q'):
             break
 
