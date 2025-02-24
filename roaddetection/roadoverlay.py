@@ -3,18 +3,21 @@ import numpy as np
 
 
 def displayarrow(frame):
+    # upload and set each transparent png to an arrow
     upar = cv2.imread('arrows/uparrow.png', cv2.IMREAD_UNCHANGED)
     downar = cv2.imread('arrows/downarrow.png', cv2.IMREAD_UNCHANGED)
     rightar = cv2.imread('arrows/rightarrow.png', cv2.IMREAD_UNCHANGED)
     leftar = cv2.imread('arrows/leftarrow.png', cv2.IMREAD_UNCHANGED)
 
+    #resize the png
     arrow = upar
     h, w, _ = arrow.shape
-    arrow = cv2.resize(arrow, (int(h*0.8), int(w*0.8)))
-
+    arrow = cv2.resize(arrow, (int(h*0.3), int(w*0.3)))
+    
     arrbgr = arrow[:, :, :3]
     arralph = arrow[:, :, 3]
 
+    #set the coordinates of where the arrow will be
     roix, roiy = 1725, 35
     h, w = arrbgr.shape[:2]
 
@@ -38,7 +41,7 @@ def overlay(frame):
     cv2.imshow("closed", closed)
 
 
-cap = cv2.VideoCapture("kroadvid.mp4")
+cap = cv2.VideoCapture("roadvid.mp4")
 
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
