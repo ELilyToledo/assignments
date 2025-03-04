@@ -4,19 +4,19 @@ import numpy as np
 
 def displayarrow(frame):
     # upload and set each transparent png to an arrow
-    upar = cv2.imread('uparrow.png', cv2.IMREAD_UNCHANGED)
-    #rightar = cv2.imread('arrows/rightarrow.png', cv2.IMREAD_UNCHANGED)
-    #leftar = cv2.imread('arrows/leftarrow.png', cv2.IMREAD_UNCHANGED)
+    upar = cv2.imread('arrows/uparrow.png', cv2.IMREAD_UNCHANGED)
+    # rightar = cv2.imread('arrows/rightarrow.png', cv2.IMREAD_UNCHANGED)
+    # leftar = cv2.imread('arrows/leftarrow.png', cv2.IMREAD_UNCHANGED)
 
-    #resize the png
+    # resize the png
     arrow = upar
     h, w, _ = arrow.shape
-    arrow = cv2.resize(arrow, (int(h*0.2), int(w*0.2)))
+    arrow = cv2.resize(arrow, (int(h * 0.2), int(w * 0.2)))
 
     arrbgr = arrow[:, :, :3]
     arralph = arrow[:, :, 3]
 
-    #set the coordinates of where the arrow will be
+    # set the coordinates of where the arrow will be
     roix, roiy = 750, 35
     h, w = arrbgr.shape[:2]
 
@@ -41,16 +41,24 @@ def overlay(frame):
     ], np.int32)
 
     cv2.polylines(frame, [roipts], isClosed=True, color=(0, 0, 255), thickness=1)
-    
+
     mask = np.zeros_like(frame)
     cv2.fillPoly(mask, [roipts], (255, 255, 255))
 
     roi = cv2.bitwise_and(frame, mask)
 
-    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    lab = cv2.cvtColor(roi, cv2.COLOR_BGR2LAB)
+    l_channel, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    cl = clahe.apply(l_channel)
+    limg = cv2.merge((cl, a, b))
+    enhanced = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+    cv2.imshow('enhanced', enhanced)
+
+    gray = cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    edges = cv2.Canny(blurred, 45, 90)
-    closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, (np.ones((21, 21), np.uint8)))
+    edges = cv2.Canny(blurred, 60, 120)
+    closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, (np.ones((23, 23), np.uint8)))
 
     cv2.imshow("edge", edges)
     cv2.imshow("closed", closed)
@@ -64,10 +72,10 @@ def overlay(frame):
 
         for line in lines:
             x1, y1, x2, y2 = line[0]
-            slope = (y2 - y1) / (x2 - x1) if x2 != x1 else float('inf') 
-            
+            slope = (y2 - y1) / (x2 - x1) if x2 != x1 else float('inf')
+
             if abs(slope) > 0.5:
-                if slope < 0: 
+                if slope < 0:
                     leftlanes.append(line[0])
                 else:
                     rightlanes.append(line[0])
@@ -82,7 +90,7 @@ def overlay(frame):
             else:
                 slope = (y2_ - y1_) / (x2 - x1)
                 intercept = y1_ - slope * x1
-                if slope != 0: 
+                if slope != 0:
                     x1_new = int((y1 - intercept) / slope)
                     x2_new = int((y2 - intercept) / slope)
                     return [(x1_new, y1), (x2_new, y2)]
@@ -99,32 +107,32 @@ def overlay(frame):
             x2_avg = int(np.mean([line[1][0] for line in lines]))
             return [(x1_avg, y_top), (x2_avg, y_bottom)]
 
-        left_lane = average_lines(leftlanes)
-        right_lane = average_lines(rightlanes)
+        leftlane = average_lines(leftlanes)
+        rightlane = average_lines(rightlanes)
 
-        if left_lane is not None:
-            cv2.line(frame, left_lane[0], left_lane[1], (0, 0, 255), 4)
-        if right_lane is not None:
-            cv2.line(frame, right_lane[0], right_lane[1], (0, 0, 255), 4)
+        if leftlane is not None:
+            cv2.line(frame, leftlane[0], leftlane[1], (0, 0, 255), 4)
+        if rightlane is not None:
+            cv2.line(frame, rightlane[0], rightlane[1], (0, 0, 255), 4)
 
         centerline = []
         # for each corresponding point in the two polylines, calculate the mipoint for the centerline
-        for p1, p2 in zip(left_lane, right_lane):
-            midpoint = ((p1[0] + p2[0]) // 2, (p1[1] + p2[1]) // 2)
-            centerline.append(midpoint)
+        if leftlane is not None and rightlane is not None:
+            for p1, p2 in zip(leftlane, rightlane):
+                midpoint = ((p1[0] + p2[0]) // 2, (p1[1] + p2[1]) // 2)
+                centerline.append(midpoint)
 
-        if len(centerline) > 0:
-            # made back into a numpy array in order to draw them as a polyline
-            centerline = np.array(centerline)
-            cv2.polylines(frame, [centerline], isClosed=False, color=(255, 0, 255), thickness=4, lineType=cv2.LINE_AA)
-         
+            if len(centerline) > 0:
+                # made back into a numpy array in order to draw them as a polyline
+                centerline = np.array(centerline)
+                cv2.polylines(frame, [centerline], isClosed=False, color=(255, 0, 255), thickness=4, lineType=cv2.LINE_AA)
+
     frame = displayarrow(frame)
 
     return frame
 
 
-cap = cv2.VideoCapture("roadvid.mov")
-
+cap = cv2.VideoCapture("roadvid.mp4")
 
 while cap.isOpened():
     ret, frame = cap.read()
