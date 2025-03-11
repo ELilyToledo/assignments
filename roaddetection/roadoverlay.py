@@ -1,18 +1,22 @@
 import cv2
 import numpy as np
+import time
 
 
-def displayarrow(frame):
+def displayarrow(frame, direction):
     # upload and set each transparent png to an arrow
-    upar = cv2.imread('arrows/uparrow.png', cv2.IMREAD_UNCHANGED)
-    # rightar = cv2.imread('arrows/rightarrow.png', cv2.IMREAD_UNCHANGED)
-    # leftar = cv2.imread('arrows/leftarrow.png', cv2.IMREAD_UNCHANGED)
-
+    rightar = cv2.imread('arrows/rightarrow.png', cv2.IMREAD_UNCHANGED)
+    leftar = cv2.imread('arrows/leftarrow.png', cv2.IMREAD_UNCHANGED)
+    
+    if direction == 'right': 
+        arrow = rightar
+    elif direction == 'left':
+        arrow = leftar
+    else:
+        return None
     # resize the png
-    arrow = upar
     h, w, _ = arrow.shape
     arrow = cv2.resize(arrow, (int(h * 0.2), int(w * 0.2)))
-
     arrbgr = arrow[:, :, :3]
     arralph = arrow[:, :, 3]
 
@@ -29,6 +33,33 @@ def displayarrow(frame):
 
     return frame
 
+
+def detectarrow(frame):
+    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    rightarrtemp = cv2.imread()
+    rightarrtemp = cv2.cvtColor(rightarrtemp, cv2.COLOR_BGR2GRAY)
+    leftarrtemp = cv2.imread()
+    leftarrrtemp = cv2.cvtColor(leftarrtemp, cv2.COLOR_BGR2GRAY)
+    
+    w, h, _ = rightarrtemp.shape()
+    threshold =  0.8
+
+    resultright = cv2.matchTemplate(frame, rightarrtemp, cv2.TM_CCOEFF_NORMED)
+    if resultright is None:
+        resultleft = cv2.matchTemplate(frame, leftarrrtemp, cv2.TM_CCOEFF_NORMED)
+        if resultleft is None:
+            return None
+        else:
+            loc =np.where(resultleft >= threshold)
+            for pt in zip(*loc[::-1]):
+                cv2.rectangle(frame, pt, (pt[0] + w, pt[1] + h), (0,0,255), 2)
+            return 'left'
+    else:
+        loc = np.where(resultright >= threshold)
+        for pt in zip(*loc[::-1]):
+            cv2.rectangle(frame, pt, (pt[0] + w, pt[1] + h), (0, 0, 255), 2)
+        return 'right'
+    
 
 def overlay(frame):
     height, width = frame.shape[:2]
@@ -57,7 +88,7 @@ def overlay(frame):
 
     gray = cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    edges = cv2.Canny(blurred, 60, 120)
+    edges = cv2.Canny(blurred, 70, 140)
     closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, (np.ones((23, 23), np.uint8)))
 
     cv2.imshow("edge", edges)
@@ -72,16 +103,16 @@ def overlay(frame):
 
         for line in lines:
             x1, y1, x2, y2 = line[0]
-            slope = (y2 - y1) / (x2 - x1) if x2 != x1 else float('inf')
+            if x1 != x2:
+                slope = (y2 - y1) / (x2 - x1)
+            else:
+                float('inf')
 
             if abs(slope) > 0.5:
                 if slope < 0:
                     leftlanes.append(line[0])
                 else:
                     rightlanes.append(line[0])
-
-        y_bottom = int(height * 0.9)
-        y_top = int(height * 0.55)
 
         def extend_line(line, y1, y2):
             x1, y1_, x2, y2_ = line
@@ -97,15 +128,15 @@ def overlay(frame):
                 else:
                     return [(x1, y1), (x2, y2)]
 
-        leftlanes = [extend_line(line, y_top, y_bottom) for line in leftlanes]
-        rightlanes = [extend_line(line, y_top, y_bottom) for line in rightlanes]
+        leftlanes = [extend_line(line, height*0.55, height*0.9) for line in leftlanes]
+        rightlanes = [extend_line(line, height*0.55, height*0.9) for line in rightlanes]
 
         def average_lines(lines):
             if len(lines) == 0:
                 return None
             x1_avg = int(np.mean([line[0][0] for line in lines]))
             x2_avg = int(np.mean([line[1][0] for line in lines]))
-            return [(x1_avg, y_top), (x2_avg, y_bottom)]
+            return [(x1_avg, height*0.55), (x2_avg, height*0.9)]
 
         leftlane = average_lines(leftlanes)
         rightlane = average_lines(rightlanes)
@@ -116,7 +147,7 @@ def overlay(frame):
             cv2.line(frame, rightlane[0], rightlane[1], (0, 0, 255), 4)
 
         centerline = []
-        # for each corresponding point in the two polylines, calculate the mipoint for the centerline
+        # for each corresponding point in the two polylines, calculate the midpoint for the centerline
         if leftlane is not None and rightlane is not None:
             for p1, p2 in zip(leftlane, rightlane):
                 midpoint = ((p1[0] + p2[0]) // 2, (p1[1] + p2[1]) // 2)
