@@ -3,17 +3,40 @@ import numpy as np
 import time
 
 
-def displayarrow(frame, direction):
+def applyfilters(frame):
+    lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+    l_channel, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    cl = clahe.apply(l_channel)
+    limg = cv2.merge((cl, a, b))
+    enhanced = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+    cv2.imshow('enhanced', enhanced)
+
+    gray = cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    global edges
+    edges = cv2.Canny(blurred, 70, 140)
+    global closed
+    closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, (np.ones((23, 23), np.uint8)))
+
+    cv2.imshow("edge", edges)
+    cv2.imshow("closed", closed)
+
+
+def displayarrow(frame):
     # upload and set each transparent png to an arrow
+    upar = cv2.imread('arrows/uparrow.png', cv2.IMREAD_UNCHANGED)
     rightar = cv2.imread('arrows/rightarrow.png', cv2.IMREAD_UNCHANGED)
     leftar = cv2.imread('arrows/leftarrow.png', cv2.IMREAD_UNCHANGED)
-    
-    if direction == 'right': 
-        arrow = rightar
-    elif direction == 'left':
-        arrow = leftar
-    else:
-        return None
+
+    # if direction == 'right':
+    #     arrow = rightar
+    # elif direction == 'left':
+    #     arrow = leftar
+    # else:
+    #     arrrow = upar
+    arrow = upar
+
     # resize the png
     h, w, _ = arrow.shape
     arrow = cv2.resize(arrow, (int(h * 0.2), int(w * 0.2)))
@@ -36,30 +59,32 @@ def displayarrow(frame, direction):
 
 def detectarrow(frame):
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    rightarrtemp = cv2.imread()
-    rightarrtemp = cv2.cvtColor(rightarrtemp, cv2.COLOR_BGR2GRAY)
-    leftarrtemp = cv2.imread()
-    leftarrrtemp = cv2.cvtColor(leftarrtemp, cv2.COLOR_BGR2GRAY)
-    
-    w, h, _ = rightarrtemp.shape()
-    threshold =  0.8
+    rightarrtemp = cv2.imread('arrows/arrowlefttemp.png')
+    leftarrtemp = cv2.imread('arrows/arrowlefttemp.png')
+
+    applyfilters(leftarrtemp)
+
+    leftarrtemp = edges
+
+    w, h = leftarrtemp.shape
+    threshold = 0.8
 
     resultright = cv2.matchTemplate(frame, rightarrtemp, cv2.TM_CCOEFF_NORMED)
     if resultright is None:
-        resultleft = cv2.matchTemplate(frame, leftarrrtemp, cv2.TM_CCOEFF_NORMED)
+        resultleft = cv2.matchTemplate(frame, leftarrtemp, cv2.TM_CCOEFF_NORMED)
         if resultleft is None:
-            return None
+            return 'up'
         else:
-            loc =np.where(resultleft >= threshold)
+            loc = np.where(resultleft >= threshold)
             for pt in zip(*loc[::-1]):
-                cv2.rectangle(frame, pt, (pt[0] + w, pt[1] + h), (0,0,255), 2)
+                cv2.rectangle(frame, pt, (pt[0] + w, pt[1] + h), (0, 0, 255), 2)
             return 'left'
     else:
         loc = np.where(resultright >= threshold)
         for pt in zip(*loc[::-1]):
             cv2.rectangle(frame, pt, (pt[0] + w, pt[1] + h), (0, 0, 255), 2)
         return 'right'
-    
+
 
 def overlay(frame):
     height, width = frame.shape[:2]
@@ -78,21 +103,7 @@ def overlay(frame):
 
     roi = cv2.bitwise_and(frame, mask)
 
-    lab = cv2.cvtColor(roi, cv2.COLOR_BGR2LAB)
-    l_channel, a, b = cv2.split(lab)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    cl = clahe.apply(l_channel)
-    limg = cv2.merge((cl, a, b))
-    enhanced = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
-    cv2.imshow('enhanced', enhanced)
-
-    gray = cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    edges = cv2.Canny(blurred, 70, 140)
-    closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, (np.ones((23, 23), np.uint8)))
-
-    cv2.imshow("edge", edges)
-    cv2.imshow("closed", closed)
+    applyfilters(roi)
 
     lines = cv2.HoughLinesP(closed, 1, np.pi / 180, threshold=50, minLineLength=100, maxLineGap=55)
 
@@ -103,7 +114,7 @@ def overlay(frame):
 
         for line in lines:
             x1, y1, x2, y2 = line[0]
-            if x1 != x2:
+            if x2 != x1:
                 slope = (y2 - y1) / (x2 - x1)
             else:
                 float('inf')
@@ -113,6 +124,9 @@ def overlay(frame):
                     leftlanes.append(line[0])
                 else:
                     rightlanes.append(line[0])
+
+        y_bottom = int(height * 0.9)
+        y_top = int(height * 0.55)
 
         def extend_line(line, y1, y2):
             x1, y1_, x2, y2_ = line
@@ -128,15 +142,15 @@ def overlay(frame):
                 else:
                     return [(x1, y1), (x2, y2)]
 
-        leftlanes = [extend_line(line, height*0.55, height*0.9) for line in leftlanes]
-        rightlanes = [extend_line(line, height*0.55, height*0.9) for line in rightlanes]
+        leftlanes = [extend_line(line, y_top, y_bottom) for line in leftlanes]
+        rightlanes = [extend_line(line, y_top, y_bottom) for line in rightlanes]
 
         def average_lines(lines):
             if len(lines) == 0:
                 return None
             x1_avg = int(np.mean([line[0][0] for line in lines]))
             x2_avg = int(np.mean([line[1][0] for line in lines]))
-            return [(x1_avg, height*0.55), (x2_avg, height*0.9)]
+            return [(x1_avg, y_top), (x2_avg, y_bottom)]
 
         leftlane = average_lines(leftlanes)
         rightlane = average_lines(rightlanes)
@@ -156,8 +170,10 @@ def overlay(frame):
             if len(centerline) > 0:
                 # made back into a numpy array in order to draw them as a polyline
                 centerline = np.array(centerline)
-                cv2.polylines(frame, [centerline], isClosed=False, color=(255, 0, 255), thickness=4, lineType=cv2.LINE_AA)
+                cv2.polylines(frame, [centerline], isClosed=False, color=(255, 0, 255), thickness=4,
+                              lineType=cv2.LINE_AA)
 
+    detectarrow(edges)
     frame = displayarrow(frame)
 
     return frame
