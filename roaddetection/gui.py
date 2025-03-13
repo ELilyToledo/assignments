@@ -11,6 +11,7 @@ import base64
 import numpy as np
 import os
 import subprocess
+from roadoverlay import proccessframe
 
 
 class Database:
@@ -151,8 +152,15 @@ class GuiTkinter:
             self.stream_elem.config(image=stream_imgtk)
             self.stream_elem.image = stream_imgtk
 
-            self.overlay_elem.config(image=stream_imgtk)
-            self.overlay_elem.image = stream_imgtk
+            overlayframe = proccessframe(frame)
+
+            overlay_rgb = cv2.cvtColor(overlayframe, cv2.COLOR_BGR2RGB)
+            overlay_rgb = cv2.resize(overlay_rgb, (480, 270))
+            overlay_img = Image.fromarray(overlay_rgb)
+            overlay_imgtk = ImageTk.PhotoImage(image=overlay_img)
+
+            self.overlay_elem.config(image=overlay_imgtk)
+            self.overlay_elem.image = overlay_imgtk
 
             self.root.update_idletasks() 
         
@@ -162,7 +170,7 @@ class GuiTkinter:
 
     def play_video(self):
         if self.cap is None:
-            self.cap = cv2.VideoCapture('roadvid.mov')
+            self.cap = cv2.VideoCapture('roadvid2.mp4')
             self.video_running = True
             self.video_paused = False
 
