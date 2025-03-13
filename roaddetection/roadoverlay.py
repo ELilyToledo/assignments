@@ -28,8 +28,8 @@ def applyfilters(frame):
     global dilated
     dilated = cv2.dilate(thinned, np.ones((5, 5), np.uint8), iterations=1)
 
-    cv2.imshow("edge", edges)
-    cv2.imshow('dialated', dilated)
+    #cv2.imshow("edge", edges)
+    #cv2.imshow('dialated', dilated)
     #cv2.imshow("closed", closed)
 
 
@@ -117,7 +117,11 @@ def detectarrow(frame):
 ''' This function detects the lane lines and calculates a centerline, and then overlays them.
 It does this by first, defining the roi points and drawing it out. Then it applies a mask to 
 the frame in the shape of the roi. Then, it passes the roi through the filters, and then
-uses the outputted image to detect the lanes using Hough Lines P. 
+uses the outputted image to detect the lanes using Hough Lines P. It then calculates the slope
+for each line detected and filters the lines baed on their slope into leftlines or rightlines.
+Then it extends the lines and takes the average of all the lines in both lists in order to
+find the lane lines. It then calculates the centerline by calculating all the midpoints between
+the two lines.
 '''
 def overlay(frame):
     elapst = time.time() - start
@@ -224,6 +228,7 @@ def proccessframe(frame):
 
 start = time.time()
 
+#in order for the video not to be played when running the GUI
 if __name__ == "__main__":
     cap = cv2.VideoCapture("roadvid2.mp4")
 
