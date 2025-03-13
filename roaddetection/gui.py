@@ -131,35 +131,34 @@ class GuiTkinter:
         messagebox.showinfo(message=f'account creation successful!')
 
     def update_vid(self):
-        def update_vid_stream(self):
-            while self.video_running:
-                if self.video_paused:
-                    continue
+        while self.video_running:
+            if self.video_paused:
+                continue
 
-                if not self.cap.isOpened():
-                    print('uh oh')
-                    break
+            if not self.cap.isOpened():
+                print('error')
+                break
 
-                ret, frame = self.cap.read() 
-                if not ret:
-                    break
+            ret, frame = self.cap.read() 
+            if not ret:
+                break
 
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                frame_rgb = cv2.resize(frame_rgb, (480, 270))
-                stream_img = Image.fromarray(frame_rgb)
-                stream_imgtk = ImageTk.PhotoImage(image=stream_img)
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame_rgb = cv2.resize(frame_rgb, (480, 270))
+            stream_img = Image.fromarray(frame_rgb)
+            stream_imgtk = ImageTk.PhotoImage(image=stream_img)
 
-                self.stream_elem.config(image=stream_imgtk)
-                self.stream_elem.image = stream_imgtk
+            self.stream_elem.config(image=stream_imgtk)
+            self.stream_elem.image = stream_imgtk
 
-                self.overlay_elem.config(image=stream_imgtk)
-                self.overlay_elem.image = stream_imgtk
+            self.overlay_elem.config(image=stream_imgtk)
+            self.overlay_elem.image = stream_imgtk
 
-                self.root.update_idletasks() 
-            
-            self.cap.release()
-            self.cap = None
-            self.video_running = False
+            self.root.update_idletasks() 
+        
+        self.cap.release()
+        self.cap = None
+        self.video_running = False
 
     def play_video(self):
         if self.cap is None:
