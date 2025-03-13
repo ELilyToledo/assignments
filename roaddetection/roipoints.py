@@ -42,7 +42,7 @@ def points(time, width, height):
     ], np.int32)
 
     print(int(time))
-    if time < 61 or 340<time<1000: 
+    if time < 70 or 340<time<1000: 
         return set2
     # elif 110 < time < 140:
     #     return set3
