@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import time
+import roipoints as rp
 
 
 def applyfilters(frame):
@@ -10,7 +11,7 @@ def applyfilters(frame):
     cl = clahe.apply(l_channel)
     limg = cv2.merge((cl, a, b))
     enhanced = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
-    cv2.imshow('enhanced', enhanced)
+    #cv2.imshow('enhanced', enhanced)
 
     gray = cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
@@ -18,24 +19,27 @@ def applyfilters(frame):
     edges = cv2.Canny(blurred, 70, 140)
     global closed
     closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, (np.ones((23, 23), np.uint8)))
+    thinned = cv2.ximgproc.thinning(edges)
+    global dilated
+    dilated = cv2.dilate(thinned, np.ones((5, 5), np.uint8), iterations=1)
 
     cv2.imshow("edge", edges)
-    cv2.imshow("closed", closed)
+    cv2.imshow('dialated', dilated)
+    #cv2.imshow("closed", closed)
 
 
-def displayarrow(frame):
+def displayarrow(frame, direction):
     # upload and set each transparent png to an arrow
     upar = cv2.imread('arrows/uparrow.png', cv2.IMREAD_UNCHANGED)
     rightar = cv2.imread('arrows/rightarrow.png', cv2.IMREAD_UNCHANGED)
     leftar = cv2.imread('arrows/leftarrow.png', cv2.IMREAD_UNCHANGED)
 
-    # if direction == 'right':
-    #     arrow = rightar
-    # elif direction == 'left':
-    #     arrow = leftar
-    # else:
-    #     arrrow = upar
-    arrow = upar
+    if direction == 'right':
+        arrow = rightar
+    elif direction == 'left':
+        arrow = leftar
+    else:
+        arrow = upar
 
     # resize the png
     h, w, _ = arrow.shape
@@ -58,35 +62,45 @@ def displayarrow(frame):
 
 
 def detectarrow(frame):
-    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    rightarrtemp = cv2.imread('arrows/arrowlefttemp.png')
-    leftarrtemp = cv2.imread('arrows/arrowlefttemp.png')
+    grayframe = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
 
-    applyfilters(leftarrtemp)
+    # Load the templates and convert to grayscale
+    rightarrtemp = cv2.imread('rightarrowtemp.png', cv2.IMREAD_GRAYSCALE)
+    leftarrtemp = cv2.imread('leftarrowtemp.png', cv2.IMREAD_GRAYSCALE)
 
-    leftarrtemp = edges
+    # Apply filters to the frame
+    blurframe = cv2.GaussianBlur(grayframe, (5, 5), 0)
+    edgeframe = cv2.Canny(blurframe, 70, 140)
 
-    w, h = leftarrtemp.shape
-    threshold = 0.8
+    rightarrtemp = cv2.Canny(rightarrtemp, 70, 140)
+    leftarrtemp = cv2.Canny(leftarrtemp, 70, 140)
 
-    resultright = cv2.matchTemplate(frame, rightarrtemp, cv2.TM_CCOEFF_NORMED)
-    if resultright is None:
-        resultleft = cv2.matchTemplate(frame, leftarrtemp, cv2.TM_CCOEFF_NORMED)
-        if resultleft is None:
-            return 'up'
-        else:
-            loc = np.where(resultleft >= threshold)
-            for pt in zip(*loc[::-1]):
-                cv2.rectangle(frame, pt, (pt[0] + w, pt[1] + h), (0, 0, 255), 2)
-            return 'left'
-    else:
-        loc = np.where(resultright >= threshold)
-        for pt in zip(*loc[::-1]):
-            cv2.rectangle(frame, pt, (pt[0] + w, pt[1] + h), (0, 0, 255), 2)
+    threshold = 0.7  
+
+    # Perform template matching for left arrow first
+    resultleft = cv2.matchTemplate(edgeframe, leftarrtemp, cv2.TM_CCOEFF_NORMED)
+    locleft = np.where(resultleft >= threshold)
+    
+    if len(locleft[0]) > 0:  # If matches are found for the left arrow
+        for pt in zip(*locleft[::-1]):
+            cv2.rectangle(frame, pt, (pt[0] + leftarrtemp.shape[1], pt[1] + leftarrtemp.shape[0]), (0, 0, 255), 2)
+        return 'left'
+    
+    # Perform template matching for right arrow if left arrow was not found
+    resultright = cv2.matchTemplate(edgeframe, rightarrtemp, cv2.TM_CCOEFF_NORMED)
+    locright = np.where(resultright >= threshold)
+    
+    if len(locright[0]) > 0:  # If matches are found for the right arrow
+        for pt in zip(*locright[::-1]):
+            cv2.rectangle(frame, pt, (pt[0] + rightarrtemp.shape[1], pt[1] + rightarrtemp.shape[0]), (0, 0, 255), 2)
         return 'right'
+
+    # If no arrows detected, return 'up' (default)
+    return 'up'
 
 
 def overlay(frame):
+    elapst = time.time() - start
     height, width = frame.shape[:2]
 
     roipts = np.array([
@@ -96,16 +110,20 @@ def overlay(frame):
         [0.9 * width, height * 0.9]  # bottom right
     ], np.int32)
 
-    cv2.polylines(frame, [roipts], isClosed=True, color=(0, 0, 255), thickness=1)
+    cv2.polylines(frame, [roipts], isClosed=True, color=(0, 0, 0), thickness=1)
+
+    roipts = rp.points(elapst, width, height)
 
     mask = np.zeros_like(frame)
     cv2.fillPoly(mask, [roipts], (255, 255, 255))
 
     roi = cv2.bitwise_and(frame, mask)
 
+    ogroi = roi
+
     applyfilters(roi)
 
-    lines = cv2.HoughLinesP(closed, 1, np.pi / 180, threshold=50, minLineLength=100, maxLineGap=55)
+    lines = cv2.HoughLinesP(dilated, 1, np.pi / 180, threshold=50, minLineLength=100, maxLineGap=55)
 
     if lines is not None:
 
@@ -173,27 +191,35 @@ def overlay(frame):
                 cv2.polylines(frame, [centerline], isClosed=False, color=(255, 0, 255), thickness=4,
                               lineType=cv2.LINE_AA)
 
-    detectarrow(edges)
-    frame = displayarrow(frame)
+    direction = detectarrow(ogroi)
+    frame = displayarrow(frame, direction)
 
     return frame
 
 
-cap = cv2.VideoCapture("roadvid.mp4")
+def proccessframe(frame):
+    frame = cv2.resize(frame, (900, 600))
+    frame = overlay(frame)
+    return frame
 
-while cap.isOpened():
-    ret, frame = cap.read()
+start = time.time()
 
-    if not ret:
-        break
-    frame = cv2.resize(frame, (900, 700))
+if __name__ == "__main__":
+    cap = cv2.VideoCapture("roadvid2.mp4")
 
-    overlay(frame)
+    while cap.isOpened():
+        ret, frame = cap.read()
 
-    cv2.imshow("Curved Path Overlay", frame)
+        if not ret:
+            break
+        
+        frame = proccessframe(frame)
 
-    if cv2.waitKey(1) == ord('q'):
-        break
+        cv2.imshow("Curved Path Overlay", frame)
 
-cap.release()
-cv2.destroyAllWindows()
+        if cv2.waitKey(1) == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
