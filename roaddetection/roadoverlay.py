@@ -4,6 +4,11 @@ import time
 import roipoints as rp
 
 
+'''This function will take the frame, or whatever other image is inputted, and pass it through
+the various image processing filters in order to provide a clearer and defined image.
+The filters it uses are greyscale, gaussian, canny edge detection, morphologyEx, thinning,
+and dilate. It also puts the image through a contrast algorithm using split color channels.
+'''
 def applyfilters(frame):
     lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
     l_channel, a, b = cv2.split(lab)
@@ -18,7 +23,7 @@ def applyfilters(frame):
     global edges
     edges = cv2.Canny(blurred, 70, 140)
     global closed
-    closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, (np.ones((23, 23), np.uint8)))
+    #closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, (np.ones((23, 23), np.uint8)))
     thinned = cv2.ximgproc.thinning(edges)
     global dilated
     dilated = cv2.dilate(thinned, np.ones((5, 5), np.uint8), iterations=1)
@@ -28,6 +33,10 @@ def applyfilters(frame):
     #cv2.imshow("closed", closed)
 
 
+'''This function takes the frame and the direction(found from the arrow detection function)
+and then based on the direction it displays the corresponding transparent arrow PNG onto
+the frame. It resizes the PNG and sets its coordinates in order to display the arrow.
+'''
 def displayarrow(frame, direction):
     # upload and set each transparent png to an arrow
     upar = cv2.imread('arrows/uparrow.png', cv2.IMREAD_UNCHANGED)
@@ -61,6 +70,13 @@ def displayarrow(frame, direction):
     return frame
 
 
+''' This function takes the frame and the road arrow templates and passes it through the
+opencv template matching algorithm in order to detect when the car is turning. It does this
+by passing the templates and the frame through the same filters and using template matching
+to try and detect if an arrow can be found. Based on what it detects, the function will then
+return a direction to be passed to the displayarrow function in order to display the corresponding
+arrow onto the frame.
+'''
 def detectarrow(frame):
     grayframe = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
 
@@ -98,7 +114,11 @@ def detectarrow(frame):
     # If no arrows detected, return 'up' (default)
     return 'up'
 
-
+''' This function detects the lane lines and calculates a centerline, and then overlays them.
+It does this by first, defining the roi points and drawing it out. Then it applies a mask to 
+the frame in the shape of the roi. Then, it passes the roi through the filters, and then
+uses the outputted image to detect the lanes using Hough Lines P. 
+'''
 def overlay(frame):
     elapst = time.time() - start
     height, width = frame.shape[:2]
